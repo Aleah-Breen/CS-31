@@ -1,474 +1,471 @@
 #include <iostream>
 #include <fstream>
-#include<cctype>
-#include<cstring>
+#include <sstream>
+#include <streambuf>
+#include <cctype>
+#include <cstring>
 using namespace std;
-//1000 max will be big enough to store the line size since any given line will have 180 chars max.
-const int MAX_FILENAME_LENGTH = 1000;
 
-//Rotate left moves every array element left one index based on params
-void rotateLeft(int startIndex, int endIndex, char line[]){
-    for(int i=startIndex;i<endIndex;i++){
-        line[i]=line[i+1];
-    }  
-    line[endIndex]='\0';
-};
+int render(int lineLength, istream& inf, ostream& outf);
 
-//rotates every array element right based on params
-void rotateRight(int startIndex, int endIndex, char line[]){
-    for(int i=endIndex;i>=startIndex;i--){
-        line[i+1]=line[i];
-    }
-}
-
-//finds the space closest to the end of the array
-int findLastSpace(char line[], int end){
-    for(int i=end;i>=0;i++){
-        if(line[i]==' '){
-            return i;
+bool getToken(char word[], istream& inf, bool& procPara, ostream& outf, bool& newPara)
+{
+    char c;
+    bool check = false;
+    while (inf.get(c))
+    {
+        // Start a new paragraph if called and not the end of the file
+        if (procPara){
+            outf << endl << endl;
+            procPara = false;
+            newPara = true;
+        }
+        
+        // Add character to the token cstring
+        if (!isspace(c))
+        {
+            char single[2] = {c, '\0'};
+            strcat(word, single);
+            check = true;
+        }
+        
+        // Return if end of the word
+        if (check && (isspace(c) || c == '-'))
+        {
+            return true;
         }
     }
-    return -1;
-}
-
-//returns True if the char is one of the punctuations the specs says to treat differently
-bool isTargetPunc(char x){
-    if(x=='.'||x=='!'||x=='?'||x==':'){
+    
+    // Send the last word of the file
+    if (check)
+    {
         return true;
     }
+    
+    // End of file
     return false;
-};
+}
 
 
-//render function
-int render(int lineLength, istream& inf, ostream& outf){
-   
-    //invalid line length
-    if(lineLength<1){
+int render(int lineLength, istream& inf, ostream& outf)
+{
+    if (lineLength < 1)
+    {
         return 2;
     }
     
-    //declaring variables to track chars, indexes, and boolean values
-    char c;
-    char line[MAX_FILENAME_LENGTH];
-    //sets all the memory of line to be empty
-    memset(line,0,sizeof(line));
-    
-    
-    //iterator keeps track of how many elements are in line and which index of line we are at
-    //Char line tracker keeps track of how many chars have been output to the current line
-    int charLineTracker=0;
-    int iterator=0;
+    int currentLine = 0;
+    bool split = false;
+    char prev[180] = "";
+    bool newPara = true;
+    bool procPara = false;
 
-    int lastSpace=-1;
-    int lastHyph=-1;;
-    bool brokenWord=false;
-    bool lastPar=false;
-    char prevChar;
-    char last2;
-    char last3;
-    bool lastIsPunc=false;
 
-    //going one character at a time
-    while ( inf.get(c) )
-	{   
-        //handle paragraph breaks. Making sure to leave no extra spaces at the end
-        if(c=='@'&&prevChar=='P'&&last2=='@'&&(last3==' '||last3=='\n')){            
-            if(line[iterator-3]==' ' && line[iterator-4]==' '){
-                for(int i=0;i<iterator-4;i++){
-                    outf<<line[i];
-                }
-                outf<<endl;
-                outf<<endl;
-            }
-            else if(line[iterator-3]==' '){
-                for(int i=0;i<iterator-3;i++){
-                    outf<<line[i];
-                }
-                outf<<endl;
-                outf<<endl;
-            }
-            else{
-                outf<< line<<endl;
-                outf<<endl;
-            }
+    for (;;)
+    {
+        bool dash = false;
+        int spaces = 0;
+        char token[180] = "";
         
-            iterator=0;
-            charLineTracker=0;
-            memset(line,0,sizeof(line));
-            lastSpace=-1;
-            lastHyph=-1;
-            lastPar=true;
+        // Get the token and end loop if file end
+        if (!getToken(token, inf, procPara , outf, newPara))
+        {
+            outf << endl;
+            break;
         }
-        //If charLineTracker=lineLength that means our current Char is 1 MORE than the max. 
-        //This spot must either be \n or we need to put a \n at the last space
-        else if(charLineTracker==lineLength){
-            //if this char is a space put a \n in
-            if(isspace(c)){
-                //if the char before this one is also a space put the \n there. (often comes up with punctuation)
-                if(line[iterator-1]==' '){
-                    line[iterator-1]='\n';
-                    charLineTracker=0;
-                    iterator=0;
-                    outf<<line;
-                    lastSpace=-1;
-                    lastHyph=-1;
-                    memset(line,0,sizeof(line));
-
-                }
-                else{
-                    line[iterator]='\n';
-                    charLineTracker=0;
-                    iterator=0;
-                    outf<<line;
-                    lastSpace=-1;
-                    lastHyph=-1;
-                    memset(line,0,sizeof(line));
-
-                }
+        
+        // Start a new paragraph
+        if (strcmp(token, "@P@") == 0)
+        {
+            if (!newPara)
+            {
+                procPara = true;
+                currentLine = 0;
+                strcpy(prev, token);
             }
-            // if the last char is punctuation it needs to be treated differently. If the word spill over to the next line
-            // I need to be sure that I include 2 spaces after each punctuation. If not, I can put no spaces.
-            else if(isTargetPunc(c)){
-               
-                //case 1: the last space was a double space from Punc and it comes after the most recent hyphen
-                if(line[lastSpace-1]==' '&&lastSpace>lastHyph){
-                    line[lastSpace-1]='\n';
-                    line[iterator]=c;
-                    iterator+=1;
-                    line[iterator]=' ';
-                    
-                    // since I am essentially deleting one of the spaces I need to rotate the whole array left once.
-                    rotateLeft(lastSpace,iterator,line);
-                    charLineTracker=(iterator-1)-(lastSpace-1);
-                    iterator=0;
-                    outf<<line;
-                    memset(line,0,sizeof(line));
-                    lastSpace=-1;
-                    lastHyph=-1;
-                    lastIsPunc=true;
-                }
 
-                //case 2: the last space was a solo space but still comes after the most recent hyphen. Replace last space with \n
-                else if(lastSpace>lastHyph){        
-                    line[lastSpace]='\n';
-                    line[iterator]=c;
-                    iterator+=1;
-                    line[iterator]=' ';
-                    outf<<line;
-                    charLineTracker=iterator-lastSpace;
-                    iterator=0;
-                    memset(line,0,sizeof(line));
-                    lastSpace=-1;
-                    lastHyph=-1;
-                    lastIsPunc=true;
-
+        }
+        
+        // Process word
+        else
+        {
+            // If a word is longer than line length
+            if (strlen(token) > lineLength)
+            {
+                split = true;
+                if (currentLine != 0)
+                {
+                    outf << endl;
                 }
-                //case 3: The last hyphen came before the last space did so we will break there.
-                else{
-                    line[iterator]=c;
-                    // since I am inserting a \n in between a hyphen and a char I need to rotate the whole array right once.
-                    rotateRight(lastHyph+1,iterator,line);
-                    line[lastHyph+1]='\n';
-                    charLineTracker=iterator-lastHyph;
-                    iterator=0;
-                    outf<<line;
-                    memset(line,0,sizeof(line));
-                    lastSpace=-1;
-                    lastHyph=-1;
-                }
-            }
-            //if the char at the break is not a space or a punctuation it is a regular char so we treat it regularly.
-            else{
-                // if there have been no hyphens or spaces then a word must be longer than the line length max. We store this 
-                // in a boolean and later return 1 if it is true. I process this by just inserting a \n.
-                if(lastSpace==-1&&lastHyph==-1){
-                    brokenWord=true;
-                    line[iterator]='\n';
-                    line[iterator+1]=c;
-                    charLineTracker=1;
-                    iterator=0;
-                    outf<<line;
-                    memset(line,0,sizeof(line));
-                }
-                // if the last char is not a space then we need to look at the last space/hyphen to break the line
-                else{                    
-                    
-                    // if the last space is a double space and comes after the most recent hyphen
-                    if(line[lastSpace-1]==' ' && lastSpace>lastHyph){
-                        line[lastSpace-1]='\n';
-                        line[iterator]=c;
-                        // once again deleting a space so we need to rotate the array left once.
-                        rotateLeft(lastSpace,iterator,line);
-                        charLineTracker=(iterator)-lastSpace;
-                        iterator=0;
-                        outf<<line;
-                        lastSpace=-1;
-                        lastHyph=-1;
-                        memset(line,0,sizeof(line));
-                    }
-                    // if the last space was more recent than the last hyphen but still solo, replace the space with \n.
-                    else if(lastSpace>lastHyph){
-                        line[lastSpace]='\n';
-                        line[iterator]=c;
-                        outf<<line;
-                        charLineTracker=iterator-lastSpace;
-                        iterator=0;
-                        memset(line,0,sizeof(line));
-                        lastSpace=-1;
-                        lastHyph=-1;
-                    }
-                    // if the last hyphen was the most recent breakpoint insert a \n after that.
-                    else{
-                        line[iterator]=c;
-                        // since I am inserting a \n I need to rotate my array Right once so I don't lose a char
-                        rotateRight(lastHyph+1,iterator,line);
-                        line[lastHyph+1]='\n';
-                        charLineTracker=iterator-lastHyph;
-                        iterator=0;
-                        outf<<line;
-                        memset(line,0,sizeof(line));
-                        lastSpace=-1;
-                        lastHyph=-1;
-                    }
-                }
+                currentLine = 0;
                 
+                // Print character by character until the line is full
+                for (int i = 0; i < strlen(token); i++)
+                {
+                    if (i % lineLength == 0 && i != 0)
+                    {
+                        outf << endl;
+                        currentLine = 0;
+                    }
+                    outf << token[i];
+                    currentLine += 1;
+                }
             }
-
-        }
-        // if the charLineTracker is greater than the lineLength we know it just was iterated by more than one, therefore
-        // the last char must have been a punctuation because we add 2 spaces after that.
-        else if(charLineTracker>lineLength){
-            // since the last character must be a space I can replace it with a \n
-            line[iterator-1]='\n';
             
-            // if the current char is not a space I need to recycle it to the next line.
-            if(!isspace(c)){
-                line[iterator]=c;
-                charLineTracker=1;
-            }
-            // if it is a space I can ignore it since we do not want a space at the start or end of a line
-            else{
-                charLineTracker=0;
-            }
-            iterator=0;
-            lastSpace=-1;
-            lastHyph=-1;
-            outf<<line;
-            memset(line,0,sizeof(line));
-
-        }
-        //this conditional is met when we are not at a paragraph break or the end of the line
-        else{
-            // if the char is a special punctuation we need to treat it differently.
-            if(isTargetPunc(c)){
-                // if the char 2 spaces back is a special punctuation it means that the chars after it should be ' '
-                if(isTargetPunc(line[iterator-2])){
-                        // replace the first space with our new punctuation and put a space after it.
-                        if(line[iterator-1]==' '){
-                            line[iterator-1]=c;
-                            line[iterator]=' ';
-
-                            iterator+=1;
-                            charLineTracker+=1;
-                            lastSpace=iterator-1;
-                        }
-                        // if the last char was not a space then I need to just store my special punc and assume it is processed with no spaces
-                        else{
-                            line[iterator]=c;
-                            line[iterator+1]=' ';
-
-                            lastSpace=iterator+1;
-                            iterator+=2;
-                            charLineTracker+=2;
-                        }
-                        
+            else if (strlen(token) <= lineLength)
+            {
+                
+                // Analyze the previous word for punctuation
+                for (int i = 0; prev[i] != '\0'; i++)
+                {
+                    if (prev[i + 1] == '\0' && (prev[i] == '.' || prev[i] == '?' || prev[i] == '!' || prev[i] == ':') && currentLine != 0 && currentLine + (strlen(token) + 2) <= lineLength)
+                    {
+                        outf << " ";
+                        spaces += 1;
                     }
-                // if their was not recently a special punctuation I need to put an extra space after this one and store both    
-                else{
-                    line[iterator]=c;
-                    line[iterator+1]=' ';
-                    lastSpace=iterator+1;
-                    iterator+=2;
-                    charLineTracker+=2;
-                }
-            }
-            // if the char is a space or \t or \n etc it needs to be processed specially.
-            else if(isspace(c)){
-                // if there was just a paragraph break do not store any spaces. @P@ always has a space after we want to ignore.
-                if(lastPar){
-                    lastPar=false;
                     
-                    lastIsPunc=false;
-                }
-                // if we are at the first character of the new line and there are >0 characters already output, it means something
-                // spilled over. Usually after a word spills over we want a space so I decided to include one here.    
-                else if(iterator==0&&charLineTracker!=0){
-                    line[iterator]=' ';
-                    lastSpace=iterator;
-
-                    iterator+=1;
-                    charLineTracker+=1;
-                    lastIsPunc=false;
-                }     
-                // if there are no characters on the line we do not want to start with a space. Instead do nothing.
-                else if(charLineTracker==0){
-                    lastIsPunc=false;
-                }   
-                // if c is a space and the last char was also a space I need to decide whether to store this second one.
-                else if(line[iterator-1]==' '){
-                    // if 2 chars back is a special punctuation I should include the second space. 
-                    if(isTargetPunc(line[iterator-2])){
-
-                        line[iterator]=' ';
-                        lastSpace=iterator;
-                        iterator+=1;
-                        charLineTracker+=1;
-                        lastIsPunc=false;
-                    }
-                    // if 2 chars back is not special punctuation I do not want back to back spaces so I ignore.
-                    // else is only here for organization of code and readability.
-                    else{
-                       // do nothing.
+                    else if (prev[i + 1] == '\0' && (prev[i] == '-'))
+                    {
+                        dash = true;
                     }
                 }
                 
-                // if the last char was not a space or special punctuation I can just record it assuming this is a space between
-                // words. By processing it this way this also takes care of putting ' ' instead of a \n from the input
-                else{
-                    line[iterator]=' ';
-
-                    lastSpace=iterator;
-                    iterator+=1;
-                    charLineTracker+=1;
+                // Add a space before a new word
+                if (currentLine != 0 && !dash && currentLine + (strlen(token) + 1) <= lineLength)
+                {
+                    outf << " ";
+                    spaces += 1;
                 }
-            }
-            // if c is not a space or special character then it is a normal character 
-            else{
-                // if it is a hyphen record this position, but do not process differnetly.
-                if(c=='-'){
-                    lastHyph=iterator;
-                }
-                // I check if the iterator is > 0 here since I want to look back some spaces. Avoids segmentation fault.
-                if(iterator>0){
-                    // in events like Dr.Smallberg we do not want to have a space after the period. This boolean checks for that
-                    if(isTargetPunc(line[iterator-2])){
-                        // if the last two chars were punctuation and space, and this one is a regular char, that means I inserted
-                        // a space I should not have after the punctuation. The only time I want 2 spaces after a punctuation
-                        // is when it ends a sentence so this makes sure the word segment is actually over.
-                        if(line[iterator-1]==' '){
-                            line[iterator-1]=c;
-                            // this funtion returns when the last space was before this one, since I replace this one with c.
-                            // Ex. Mr. K --> Mr.K
-                            lastSpace=findLastSpace(line,iterator-1);
-                        }
-                        // if the last char was not a space I can just input this one normally.
-                        else{
-                            line[iterator]=c;
-                            iterator+=1;
-                            charLineTracker+=1;
-                        }
-                    }
-                    // if the last char was not a incorrect space after punctuation I can just record it.
-
-                    else{
-                        line[iterator]=c;
-                        iterator++;
-                        charLineTracker++;
-                        lastIsPunc=false;
-                    }
-                }
-                // if the iterator=0 I can just store whatever char and assume the last one was not an invalid punctuation, 
-                // since there is no last char.
-                else{
                 
-                line[iterator]=c;
-                iterator++;
-                charLineTracker++;
-                lastIsPunc=false;
+                // Prints the word if it fits in the line
+                if ((spaces == 2 && currentLine + spaces + strlen(token) <= lineLength) || (spaces == 1 && currentLine + spaces + strlen(token) <= lineLength) || (dash && currentLine + strlen(token) <= lineLength) || newPara)
+                {
+                    outf << token;
                 }
+                
+                // Moves the word to the next line if too long
+                else
+                {
+                    outf << endl << token;
+                    currentLine = 0;
+                }
+                
+                currentLine += strlen(token) + spaces;
             }
-            lastPar=false;
-        }
-        // these 3 conditionals just store the last characters so that I can easily access them with the paragraph break.
-        // I need a special boolean for each in case I clear lines memory.
-        if(iterator>=2){
-            last3=last2;
-            last2=prevChar;
-            prevChar=c;
-            }
-        else if(iterator==2){
-            last2=prevChar;
-            prevChar=c;
-        }
-        else if(iterator==1){
-            prevChar=c;
-        }
+            strcpy(prev, token);
+            newPara = false;
 
-    }
-    
-    
-    // printing the last line. Since the while loop goes until there are no more chars I still need to print the last line 
-
-    //checks if the last chars are spaces or \n so that I do not have any spaces at the end of the output.
-    
-    if(strcmp(line,"\n")==0){
-        // do nothing    
-    }
-    // checks for double space
-    else if(strcmp(line,"")==0){
-        //do nothing
-    }
-    else if(line[iterator-1]==' ' && line[iterator-2]==' '){
-        for(int i=0;i<iterator-2;i++){
-            outf<<line[i];
         }
-        outf << '\n';
+        
     }
-    // checks for a single space at the end of the output.
-    else if(line[iterator-1]==' '){
-        for(int i=0;i<iterator-1;i++){
-            outf<<line[i];
-        }
-        outf << '\n';
-    }
-    // if there are no extra spaces I can output the line normally
-    else{
-        outf<< line << endl;
-    }
-    // if any word has been broken in half then I need to return 1. I handle this boolean value early and now it is time to check it.
-    if(brokenWord){
+    
+    
+    if (split)
+    {
         return 1;
     }
-    // else return 0
+    
     return 0;
+}
 
+int top()
+{
+    const int MAX_FILENAME_LENGTH = 100;
+    for (;;)
+    {
+        cout << "Enter input file name (or q to quit): ";
+        char filename[MAX_FILENAME_LENGTH];
+        cin.getline(filename, MAX_FILENAME_LENGTH);
+        if (strcmp(filename, "q") == 0)
+            break;
+        ifstream infile(filename);
+        if (!infile)
+        {
+            cerr << "Cannot open " << filename << "!" << endl;
+            continue;
+        }
+        cout << "Enter maximum line length: ";
+        int len;
+        cin >> len;
+        cin.ignore(10000, '\n');
+        int returnCode = render(len, infile, cout);
+        cout << "Return code is " << returnCode << endl;
+    }
+}
 
+#include <iostream>
+#include <sstream>
+#include <streambuf>
+#include <string>
+#include <cassert>
+using namespace std;
+
+class LimitOutputStreambuf : public streambuf
+{
+    public:
+        LimitOutputStreambuf(streambuf* sb, size_t lim)
+         : real_streambuf(sb), limit(lim)
+        {
+                static char dummy;
+                setp(&dummy, &dummy);
+        }
+    private:
+        streambuf* real_streambuf;
+        size_t limit;
+
+        int overflow(int c)
+        {
+                if (limit == 0)
+                        return traits_type::eof();
+                limit--;
+                return real_streambuf->sputc(c);
+        }
 };
 
+class StreambufSwitcher
+{
+    public:
+    StreambufSwitcher(ios& dest, streambuf* sb,
+                    ios::iostate exceptions = ios::goodbit)
+     : dest_stream(dest), oldsb(dest.rdbuf(sb)), oldex(dest.exceptions())
+    { dest_stream.exceptions(exceptions); }
+    StreambufSwitcher(ios& dest, ios& src)
+     : StreambufSwitcher(dest, src.rdbuf(), src.exceptions())
+    {}
+    ~StreambufSwitcher()
+    { dest_stream.rdbuf(oldsb); dest_stream.exceptions(oldex); }
+    private:
+    ios& dest_stream;
+    streambuf* oldsb;
+    ios::iostate oldex;
+};
 
-// main provided by smallberg
-int main()
+string repeat(size_t n, string s)
+{
+    string result;
+    result.reserve(n * s.size());
+    for ( ; n > 0; n--)
+        result += s;
+    return result;
+}
+
+int render(int lineLength, istream& inf, ostream& outf);
+
+void testone(int n)
+{
+    istringstream iss;
+    StreambufSwitcher ssi(cin, iss.rdbuf());
+
+    ostringstream oss;
+    LimitOutputStreambuf lob(oss.rdbuf(), 1000*1000+10);
+    StreambufSwitcher sso(cout, &lob);
+
+    LimitOutputStreambuf lob2(cerr.rdbuf(), 0);
+    StreambufSwitcher sse(cerr, &lob2);
+
+    switch (n)
     {
-        for (;;)
-        {
-            cout << "Enter input file name (or q to quit): ";
-            char filename[MAX_FILENAME_LENGTH];
-            cin.getline(filename, MAX_FILENAME_LENGTH);
-            if (strcmp(filename, "q") == 0)
-                break;
-            ifstream infile(filename);
-            if (!infile)
-            {
-                cerr << "Cannot open " << filename << "!" << endl;
-                continue;
-            }
-            ofstream outfile("results.txt");
-            cout << "Enter maximum line length: ";
-            int len;
-            cin >> len;
-            cin.ignore(10000, '\n');
-            int returnCode = render(len, infile,outfile);
-            cout << "Return code is " << returnCode << endl;
-        }
+                                 default: {
+        cout << "Bad argument" << endl;
+                        } break; case  1: {
+        iss.str("hello there\n\nthis is a test\n");
+        assert(render(0, iss, oss) == 2);
+                        } break; case  2: {
+        iss.str("hello there\n\nthis is a test\n");
+        render(0, iss, oss);
+        assert(oss.str().empty());
+                        } break; case  3: {
+        iss.str("hello there\n\nthis is a test\n");
+        ostringstream oss2;
+        StreambufSwitcher sso2(cout, oss2.rdbuf());
+        render(11, iss, oss);
+        assert(oss2.str().empty());
+                        } break; case  4: {
+        iss.str("hello there\n\nthis is a test\n");
+        istringstream iss2("Z Y X W V\n");
+        StreambufSwitcher ssi2(cin, iss2.rdbuf());
+                render(11, iss, oss);
+        string s = oss.str();
+        assert(s.find_first_of("ZYXWV") == string::npos  &&
+        s.find("hello") != string::npos);
+                        } break; case  5: {
+        iss.str("");
+        assert(render(10, iss, oss) == 0  &&  oss.str().empty());
+                        } break; case  6: {
+        iss.str("     \n\n    \n\n");
+        assert(render(10, iss, oss) == 0  &&  oss.str().empty());
+                        } break; case  7: {
+        iss.str("abcdefghi abcdefghijk\n");
+        assert(render(10, iss, oss) == 1);
+                        } break; case  8: {
+        iss.str("abcdefghi abcdefghijk abc abc abc abc abc abc abc\n");
+        assert(render(10, iss, oss) == 1);
+                        } break; case  9: {
+        iss.str("abcdefghi abcdefghij\n");
+        assert(render(10, iss, oss) == 0);
+                        } break; case 10: {
+        iss.str("abcdefghi abcdefgh-ijk\n");
+        assert(render(10, iss, oss) == 0);
+                        } break; case 11: {
+        iss.str("hello there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello there") != string::npos);
+                        } break; case 12: {
+        iss.str("hello       there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello there") != string::npos);
+                        } break; case 13: {
+        iss.str("hello. there? bye\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello.  there?  bye") != string::npos);
+                        } break; case 14: {
+        iss.str("hello! there: bye\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello!  there:  bye") != string::npos);
+                        } break; case 15: {
+        iss.str("hello? there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello?  there") != string::npos);
+                        } break; case 16: {
+        iss.str("hello. abcdefghi\n");
+        render(10, iss, oss);
+        assert(oss.str().find("hello.\na") != string::npos);
+                        } break; case 17: {
+        iss.str("hello.there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello.there") != string::npos);
+                        } break; case 18: {
+        iss.str("hello'3*%there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello'3*%there") != string::npos);
+                        } break; case 19: {
+        iss.str("hello-there\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello-there") != string::npos);
+                        } break; case 20: {
+        iss.str("hello\nthere\n");
+        render(30, iss, oss);
+        assert(oss.str().find("hello there") != string::npos);
+                        } break; case 21: {
+        iss.str("abcdefg hijkl\n");
+        render(10, iss, oss);
+        assert(oss.str().find("abcdefg\n") != string::npos);
+                        } break; case 22: {
+        iss.str("abcdefg hijkl\n");
+        render(10, iss, oss);
+        assert(oss.str().find("\nhijkl") != string::npos);
+                        } break; case 23: {
+        iss.str("hellohello abcdef ghi jklmnop\n");
+        render(10, iss, oss);
+        assert(oss.str().find("\nabcdef ghi\n") != string::npos);
+                        } break; case 24: {
+        iss.str("hellohello abcdef ghi jklmnop qrst\n");
+        render(10, iss, oss);
+        assert(oss.str().find("\nqrst") != string::npos);
+                        } break; case 25: {
+        iss.str("abcdefg x-ray\n");
+        render(10, iss, oss);
+        assert(oss.str().find("x-\nray") != string::npos);
+                        } break; case 26: {
+        iss.str("abcdefg abc xyz-pq-rs\n");
+        render(10, iss, oss);
+        assert(oss.str().find("xyz-\npq-rs") != string::npos);
+                        } break; case 27: {
+        iss.str("abcdefg abc x-yz-pqr\n");
+        render(10, iss, oss);
+        assert(oss.str().find("x-yz-\npqr") != string::npos);
+                        } break; case 28: {
+        iss.str("abcdefg abc xyz----yz\n");
+        render(10, iss, oss);
+        assert(oss.str().find("xyz---\n-yz") != string::npos);
+                        } break; case 29: {
+        iss.str("abcdefg -xyz\n");
+        render(10, iss, oss);
+        assert(oss.str().find(" -\nxyz") != string::npos);
+                        } break; case 30: {
+        iss.str("abcdefg abc abcdefghijklmnopqrstuvw\n");
+        render(10, iss, oss);
+        assert(oss.str().find("\nabcdefghij\nklmnopqrst\nuvw") != string::npos);
+                        } break; case 31: {
+        iss.str("abc\n");
+        render(10, iss, oss);
+        assert(oss.str() == "abc\n");
+                        } break; case 32: {
+        iss.str("abc @P@ def\n");
+        render(10, iss, oss);
+        assert(oss.str().find("abc\n\ndef") != string::npos);
+                        } break; case 33: {
+        iss.str("abc @P@  @P@ def\n");
+        render(10, iss, oss);
+        assert(oss.str().find("abc\n\ndef") != string::npos);
+                        } break; case 34: {
+        iss.str("abc\n@P@\ndef\n");
+        render(10, iss, oss);
+        assert(oss.str().find("abc\n\ndef") != string::npos);
+                        } break; case 35: {
+        iss.str("@P@ abc @P@ def\n");
+        render(10, iss, oss);
+        string result("abc\n\ndef\n");
+        assert(oss.str() == result  ||
+                result.compare(0, 8, oss.str()) == 0);
+                        } break; case 36: {
+        iss.str("abc @P@ def\n@P@\n");
+        render(10, iss, oss);
+        assert(oss.str() == "abc\n\ndef\n");
+                        } break; case 37: {
+        iss.str("@P@ @P@ @P@ abc @P@ def @P@ @P@ @P@\n");
+        render(30, iss, oss);
+        assert(oss.str() == "abc\n\ndef\n");
+                        } break; case 38: {
+        string s25 = "abcdefghijklmnopqrstuvwxy";
+        string s178(repeat(7, s25) + "abc");
+        iss.str(s178 + "\n");
+        assert(render(179, iss, oss) == 0);
+        string result(s178 + "\n");
+        assert(oss.str() == result  ||
+                result.compare(0, 178, oss.str()) == 0);
+                        } break; case 39: {
+        string s24 = "abcdefghijklmnopqrstuvwx";
+        string s123(repeat(5, s24) + "abc");
+        iss.str(s123 + "\n" + s123 + "\n");
+        assert(render(249, iss, oss) == 0);
+        string result(s123 + " " + s123 + "\n");
+        assert(oss.str() == result  ||
+                result.compare(0, 247, oss.str()) == 0);
+                        } break; case 40: {
+        string s10 = "a\na\na\na\na\na\na\na\na\na\n";
+        string s100(repeat(10, s10));
+        string s20000(repeat(200, s100)); // For some people, 200 was 20000
+        iss.str(s20000);
+        render(2, iss, oss);
+        assert(oss.str() == s20000  ||
+                s20000.compare(0, 19999, oss.str()) == 0);
+                        } break; case 41: {
+        string s25 = "abcdefghijklmnopqrstuvwxy";
+        string s178(repeat(7, s25) + "abc");
+        iss.str(repeat(11, s178 + "\n"));
+        int n = render(2000, iss, oss);
+        string result(repeat(11-1, s178 + " ") + s178 + "\n");
+        assert((n == 2  &&  oss.str().empty())  ||  (n == 0  &&
+                (oss.str() == result  ||
+                 result.compare(0, 11*(178+1)-1, oss.str()) == 0)));
+                        } break; case 42: {
+        string s25 = "abcdefghijklmnopqrstuvwxy";
+        string s178(repeat(7, s25) + "abc");
+        iss.str(repeat(550, s178 + "\n"));
+        assert(render(99000, iss, oss) == 0);
+        string result(repeat(550-1, s178 + " ") + s178 + "\n");
+        assert(oss.str() == result  ||
+                 result.compare(0, 550*(178+1)-1, oss.str()) == 0);
+                        } break;
     }
+}
+
+int main()
+{
+    cout << "Enter test number: ";
+    int n;
+    cin >> n;
+    testone(n);
+    cout << "Passed" << endl;
+}
